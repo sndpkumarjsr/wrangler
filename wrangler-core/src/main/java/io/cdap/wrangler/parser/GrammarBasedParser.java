@@ -73,23 +73,32 @@ public class GrammarBasedParser implements RecipeParser {
       List<Directive> result = new ArrayList<>();
 
       new GrammarWalker(new RecipeCompiler(), context).walk(recipe, (command, tokenGroup) -> {
-        directiveIndex.getAndIncrement();
+        int currentIndex = directiveIndex.incrementAndGet(); // Use the current index
+
         DirectiveInfo info = registry.get(namespace, command);
         if (info == null) {
           throw new DirectiveNotFoundException(
-            String.format("Directive '%s' not found in system and user scope. Check the name of directive.", command)
+                  String.format("Directive '%s' not found at index %d. Please verify the directive name.", command, currentIndex)
           );
         }
 
         try {
           Directive directive = info.instance();
+          if (directive == null) {
+            throw new DirectiveLoadException("Failed to create instance for directive: " + command);
+          }
+
           UsageDefinition definition = directive.define();
+          if (definition == null) {
+            throw new DirectiveLoadException("Missing usage definition for directive: " + command);
+          }
           Arguments arguments = new MapArguments(definition, tokenGroup);
           directive.initialize(arguments);
           result.add(directive);
-
         } catch (IllegalAccessException | InstantiationException e) {
-          throw new DirectiveLoadException(e.getMessage(), e);
+          throw new DirectiveLoadException(
+                  String.format("Failed to instantiate directive '%s' at index %d: %s", command, currentIndex, e.getMessage()), e
+          );
         }
       });
 
